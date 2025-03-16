@@ -2,9 +2,9 @@
 
 namespace Hasyirin\Actor\Tests;
 
+use Hasyirin\Actor\ActorServiceProvider;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Orchestra\Testbench\TestCase as Orchestra;
-use Hasyirin\Actor\ActorServiceProvider;
 
 class TestCase extends Orchestra
 {

@@ -2,9 +2,9 @@
 
 namespace Hasyirin\Actor;
 
+use Hasyirin\Actor\Commands\ActorCommand;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
-use Hasyirin\Actor\Commands\ActorCommand;
 
 class ActorServiceProvider extends PackageServiceProvider
 {
