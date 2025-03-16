@@ -24,7 +24,7 @@ class Action extends Model
     protected function casts(): array
     {
         return [
-            'acted_at' => 'datetime'
+            'acted_at' => 'datetime',
         ];
     }
 
