@@ -19,6 +19,12 @@ trait InteractsWithActions
         return Actor::act($this, $action, $actor, $at);
     }
 
+    public function acted(string $action): bool
+    {
+        /** @var Model $this */
+        return Actor::acted($this, $action);
+    }
+
     public function actions(): MorphMany
     {
         return $this->morphMany(config('actor.models.action'), 'resource');

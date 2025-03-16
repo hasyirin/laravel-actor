@@ -38,4 +38,13 @@ class Actor
             ->ofName($action)
             ->first();
     }
+
+    public function acted(Model $on, string $action): bool
+    {
+        return config('actor.models.action')::query()
+            ->latest('acted_at')
+            ->ofResource($on)
+            ->ofName($action)
+            ->exists();
+    }
 }
