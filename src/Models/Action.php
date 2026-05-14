@@ -6,12 +6,9 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Action extends Model
 {
-    use SoftDeletes;
-
     protected $fillable = [
         'resource_type',
         'resource_id',
@@ -28,10 +25,9 @@ class Action extends Model
         ];
     }
 
-    public function __construct(array $attributes = [])
+    public function getTable(): string
     {
-        parent::__construct($attributes);
-        $this->table = config('actor.tables.actions', parent::getTable());
+        return $this->table ?? config('actor.tables.actions', 'actions');
     }
 
     public function resource(): MorphTo
@@ -59,10 +55,5 @@ class Action extends Model
     public function scopeOfName(Builder $query, string $name): Builder
     {
         return $query->where('name', $name);
-    }
-
-    public function formattedActedAt(): Attribute
-    {
-        return Attribute::make(get: fn () => $this->acted_at->format(config('actor.formats.datetime')));
     }
 }

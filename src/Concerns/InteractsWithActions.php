@@ -19,20 +19,34 @@ trait InteractsWithActions
         return Actor::act($this, $action, $actor, $at);
     }
 
-    public function acted(string $action): bool
+    public function acted(string $action, ?Model $actor = null): bool
     {
         /** @var Model $this */
-        return Actor::acted($this, $action);
+        return Actor::acted($this, $action, $actor);
     }
 
-    public function action(string $name): ?Action
+    public function action(string $name, ?Model $actor = null): ?Action
     {
-        /** @var Model $this */
-        return Actor::findAction($this, $name);
+        if ($this->relationLoaded('actions')) {
+            $collection = $this->actions;
+
+            if ($actor) {
+                $collection = $collection
+                    ->where('actor_type', $actor->getMorphClass())
+                    ->where('actor_id', $actor->getKey());
+            }
+
+            return $collection->firstWhere('name', $name);
+        }
+
+        return $this->actions()
+            ->where('name', $name)
+            ->when($actor, fn ($query) => $query->ofActor($actor))
+            ->first();
     }
 
     public function actions(): MorphMany
     {
-        return $this->morphMany(config('actor.models.action'), 'resource');
+        return $this->morphMany(config('actor.models.action', Action::class), 'resource');
     }
 }

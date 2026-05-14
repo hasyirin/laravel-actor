@@ -1,10 +1,13 @@
 {
     "name": "hasyirin/laravel-actor",
-    "description": "This is my package laravel-actor",
+    "description": "A polymorphic action log for Eloquent models — track who did what, when.",
     "keywords": [
-        "Hasyirin Fakhriy",
         "laravel",
-        "laravel-actor"
+        "laravel-actor",
+        "audit-log",
+        "activity-log",
+        "actions",
+        "tracking"
     ],
     "homepage": "https://github.com/hasyirin/laravel-actor",
     "license": "MIT",

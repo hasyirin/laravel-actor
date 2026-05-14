@@ -1,15 +1,15 @@
 <?php
 
+use Hasyirin\Actor\Models\Action;
+
 return [
     'tables' => [
         'actions' => 'actions',
     ],
 
     'models' => [
-        'action' => \Hasyirin\Actor\Models\Action::class,
+        'action' => Action::class,
     ],
 
-    'formats' => [
-        'datetime' => 'd/m/Y, H:i A',
-    ],
+    'guard' => null,
 ];

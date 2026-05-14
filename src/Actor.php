@@ -2,6 +2,7 @@
 
 namespace Hasyirin\Actor;
 
+use Hasyirin\Actor\Exceptions\MissingActorException;
 use Hasyirin\Actor\Models\Action;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
@@ -10,15 +11,15 @@ class Actor
 {
     public function act(Model $on, string $action, ?Model $actor = null, ?Carbon $at = null): Action
     {
-        $actor ??= auth()->user();
+        $actor ??= auth(config('actor.guard'))->user();
 
         if (empty($actor)) {
-            throw new \InvalidArgumentException('Actor is empty and no authenticated user to set as actor.');
+            throw MissingActorException::noAuthenticatedUser();
         }
 
         /** @var Model $actor */
 
-        return config('actor.models.action')::query()
+        return config('actor.models.action', Action::class)::query()
             ->updateOrCreate([
                 'resource_type' => $on->getMorphClass(),
                 'resource_id' => $on->getKey(),
@@ -30,21 +31,21 @@ class Actor
             ]);
     }
 
-    public function findAction(Model $on, string $action): ?Action
+    public function findAction(Model $on, string $action, ?Model $actor = null): ?Action
     {
-        return config('actor.models.action')::query()
-            ->latest('acted_at')
+        return config('actor.models.action', Action::class)::query()
             ->ofResource($on)
             ->ofName($action)
+            ->when($actor, fn ($query) => $query->ofActor($actor))
             ->first();
     }
 
-    public function acted(Model $on, string $action): bool
+    public function acted(Model $on, string $action, ?Model $actor = null): bool
     {
-        return config('actor.models.action')::query()
-            ->latest('acted_at')
+        return config('actor.models.action', Action::class)::query()
             ->ofResource($on)
             ->ofName($action)
+            ->when($actor, fn ($query) => $query->ofActor($actor))
             ->exists();
     }
 }
