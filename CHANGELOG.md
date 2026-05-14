@@ -34,7 +34,3 @@ php artisan migrate
 
 ```
 See the [README](https://github.com/hasyirin/laravel-actor/blob/main/README.md) for full usage and configuration.
-
-## Unreleased
-
-Initial development. No tagged releases yet.
