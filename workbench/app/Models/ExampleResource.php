@@ -8,4 +8,6 @@ use Illuminate\Database\Eloquent\Model;
 class ExampleResource extends Model
 {
     use InteractsWithActions;
+
+    protected $guarded = [];
 }
