@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Orchestra\Testbench\TestCase as Orchestra;
+use Workbench\App\Models\ExampleActor;
 
 class TestCase extends Orchestra
 {
@@ -32,7 +33,7 @@ class TestCase extends Orchestra
     public function getEnvironmentSetUp($app)
     {
         config()->set('database.default', 'testing');
-        config()->set('auth.providers.users.model', \Workbench\App\Models\ExampleActor::class);
+        config()->set('auth.providers.users.model', ExampleActor::class);
     }
 
     protected function createFixtureTables(): void
