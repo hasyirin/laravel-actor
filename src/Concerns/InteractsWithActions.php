@@ -15,13 +15,11 @@ trait InteractsWithActions
 {
     public function act(string $action, ?Model $actor = null, ?Carbon $at = null): Action
     {
-        /** @var Model $this */
         return Actor::act($this, $action, $actor, $at);
     }
 
     public function acted(string $action, ?Model $actor = null): bool
     {
-        /** @var Model $this */
         return Actor::acted($this, $action, $actor);
     }
 
@@ -45,8 +43,14 @@ trait InteractsWithActions
             ->first();
     }
 
+    /**
+     * @return MorphMany<Action, $this>
+     */
     public function actions(): MorphMany
     {
-        return $this->morphMany(config('actor.models.action', Action::class), 'resource');
+        /** @var class-string<Action> $class */
+        $class = config('actor.models.action', Action::class);
+
+        return $this->morphMany($class, 'resource');
     }
 }
