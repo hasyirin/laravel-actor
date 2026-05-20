@@ -2,6 +2,7 @@
 
 use Hasyirin\Actor\Models\Action;
 use Illuminate\Support\Facades\DB;
+use Workbench\App\Enums\ExampleAction;
 use Workbench\App\Models\ExampleActor;
 use Workbench\App\Models\ExampleResource;
 
@@ -96,4 +97,35 @@ it('trait act() honors the supplied $at timestamp', function () {
     $action = $this->resource->act('approved', $this->actor, $at);
 
     expect($action->acted_at->format('Y-m-d H:i:s'))->toBe($at->format('Y-m-d H:i:s'));
+});
+
+it('trait act() accepts a BackedEnum', function () {
+    $action = $this->resource->act(ExampleAction::Approved, $this->actor);
+
+    expect($action->name)->toBe('approved');
+});
+
+it('trait acted() accepts a BackedEnum', function () {
+    $this->resource->act('approved', $this->actor);
+
+    expect($this->resource->acted(ExampleAction::Approved))->toBeTrue()
+        ->and($this->resource->acted(ExampleAction::Reviewed))->toBeFalse();
+});
+
+it('trait action() accepts a BackedEnum', function () {
+    $this->resource->act('approved', $this->actor);
+
+    expect($this->resource->action(ExampleAction::Approved))->not->toBeNull()
+        ->and($this->resource->action(ExampleAction::Reviewed))->toBeNull();
+});
+
+it('trait action() accepts a BackedEnum against a loaded relation (no extra query)', function () {
+    $this->resource->act('approved', $this->actor);
+    $this->resource->load('actions');
+
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+
+    expect($this->resource->action(ExampleAction::Approved))->not->toBeNull()
+        ->and(DB::getQueryLog())->toBeEmpty();
 });

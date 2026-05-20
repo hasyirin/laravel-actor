@@ -2,6 +2,7 @@
 
 namespace Hasyirin\Actor\Concerns;
 
+use BackedEnum;
 use Hasyirin\Actor\Facades\Actor;
 use Hasyirin\Actor\Models\Action;
 use Illuminate\Database\Eloquent\Model;
@@ -13,18 +14,20 @@ use Illuminate\Support\Carbon;
  */
 trait InteractsWithActions
 {
-    public function act(string $action, ?Model $actor = null, ?Carbon $at = null): Action
+    public function act(BackedEnum|string $action, ?Model $actor = null, ?Carbon $at = null): Action
     {
         return Actor::act($this, $action, $actor, $at);
     }
 
-    public function acted(string $action, ?Model $actor = null): bool
+    public function acted(BackedEnum|string $action, ?Model $actor = null): bool
     {
         return Actor::acted($this, $action, $actor);
     }
 
-    public function action(string $name, ?Model $actor = null): ?Action
+    public function action(BackedEnum|string $name, ?Model $actor = null): ?Action
     {
+        $name = $name instanceof BackedEnum ? $name->value : $name;
+
         if ($this->relationLoaded('actions')) {
             $collection = $this->actions;
 

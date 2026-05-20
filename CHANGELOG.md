@@ -2,6 +2,16 @@
 
 All notable changes to `laravel-actor` will be documented in this file.
 
+## v1.1.0 - 2026-05-21
+
+### Added
+
+- `Actor::act()`, `Actor::findAction()`, and `Actor::acted()` now accept a `BackedEnum` in addition to a `string` for the action name. The enum's `value` is used for storage and lookup.
+- `InteractsWithActions::act()`, `acted()`, and `action()` accept the same `BackedEnum|string` union for symmetry.
+- `Action::scopeOfName()` accepts `BackedEnum|string`.
+
+Existing `string` callers are unaffected.
+
 ## v1.0.1 - 2026-05-14
 
 ### Fixed

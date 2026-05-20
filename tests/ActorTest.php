@@ -3,6 +3,7 @@
 use Hasyirin\Actor\Exceptions\MissingActorException;
 use Hasyirin\Actor\Facades\Actor;
 use Hasyirin\Actor\Models\Action;
+use Workbench\App\Enums\ExampleAction;
 use Workbench\App\Models\ExampleActor;
 use Workbench\App\Models\ExampleResource;
 
@@ -123,4 +124,33 @@ it('findAction() filters by actor when supplied', function () {
 
     expect(Actor::findAction($this->resource, 'approved', $this->actor))->not->toBeNull()
         ->and(Actor::findAction($this->resource, 'approved', $bob))->toBeNull();
+});
+
+it('act() accepts a BackedEnum and stores its value', function () {
+    $action = Actor::act($this->resource, ExampleAction::Approved, $this->actor);
+
+    expect($action->name)->toBe('approved');
+});
+
+it('act() with BackedEnum upserts against a string with the same value', function () {
+    Actor::act($this->resource, 'approved', $this->actor);
+    Actor::act($this->resource, ExampleAction::Approved, $this->actor);
+
+    expect(Action::count())->toBe(1);
+});
+
+it('acted() accepts a BackedEnum', function () {
+    Actor::act($this->resource, 'approved', $this->actor);
+
+    expect(Actor::acted($this->resource, ExampleAction::Approved))->toBeTrue()
+        ->and(Actor::acted($this->resource, ExampleAction::Reviewed))->toBeFalse();
+});
+
+it('findAction() accepts a BackedEnum', function () {
+    Actor::act($this->resource, 'approved', $this->actor);
+
+    $action = Actor::findAction($this->resource, ExampleAction::Approved);
+
+    expect($action)->toBeInstanceOf(Action::class)
+        ->and($action->name)->toBe('approved');
 });

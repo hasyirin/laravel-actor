@@ -2,6 +2,7 @@
 
 namespace Hasyirin\Actor\Models;
 
+use BackedEnum;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -51,8 +52,8 @@ class Action extends Model
             ->where('actor_id', $actor->getKey());
     }
 
-    public function scopeOfName(Builder $query, string $name): Builder
+    public function scopeOfName(Builder $query, BackedEnum|string $name): Builder
     {
-        return $query->where('name', $name);
+        return $query->where('name', $name instanceof BackedEnum ? $name->value : $name);
     }
 }
