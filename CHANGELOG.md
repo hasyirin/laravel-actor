@@ -2,6 +2,15 @@
 
 All notable changes to `laravel-actor` will be documented in this file.
 
+## v1.1.1 - 2026-10-28
+
+### Changed
+
+- Dev dependencies now allow Pest 5 (PHPUnit 13): `pestphp/pest`, `pestphp/pest-plugin-arch`, and `pestphp/pest-plugin-laravel` accept `^3.0||^4.0||^5.0`.
+- CI workflows use `actions/checkout` v7 instead of v6.
+
+No changes to runtime code or `require` constraints.
+
 ## v1.1.0 - 2026-05-21
 
 ### Added
