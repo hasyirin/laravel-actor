@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '**.php'
+      - '**.stub'
       - '.github/workflows/run-tests.yml'
       - 'phpunit.xml.dist'
       - 'composer.json'
@@ -18,13 +19,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         php: [8.5, 8.4]
-        laravel: [13.*, 12.*]
+        laravel: [13.*]
         stability: [prefer-lowest, prefer-stable]
         include:
           - laravel: 13.*
             testbench: 11.*
-          - laravel: 12.*
-            testbench: 10.*
 
     name: P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.stability }} - ${{ matrix.os }}
 
@@ -36,7 +35,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, fileinfo
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, posix, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, fileinfo
           coverage: none
 
       - name: Setup problem matchers
@@ -54,3 +53,72 @@ jobs:
 
       - name: Execute tests
         run: vendor/bin/pest --ci
+
+  databases:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - database: mysql
+            image: mysql:8.4
+            port: 3306
+            username: root
+            health: mysqladmin ping -h 127.0.0.1
+          - database: mariadb
+            image: mariadb:11.8
+            port: 3306
+            username: root
+            health: healthcheck.sh --connect --innodb_initialized
+          - database: pgsql
+            image: postgres:18
+            port: 5432
+            username: postgres
+            health: pg_isready -h 127.0.0.1 -U postgres
+
+    name: P8.5 - L13.* - prefer-stable - ${{ matrix.database }}
+
+    services:
+      database:
+        image: ${{ matrix.image }}
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: testing
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 'yes'
+          MARIADB_DATABASE: testing
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: testing
+        ports:
+          - ${{ matrix.port }}:${{ matrix.port }}
+        options: >-
+          --health-cmd="${{ matrix.health }}"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.5
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, posix, pdo, pdo_mysql, pdo_pgsql, sqlite, pdo_sqlite, bcmath, intl, fileinfo
+          coverage: none
+
+      - name: Install dependencies
+        run: |
+          composer require "laravel/framework:13.*" "orchestra/testbench:11.*" --no-interaction --no-update
+          composer update --prefer-stable --prefer-dist --no-interaction
+
+      - name: Execute tests
+        run: vendor/bin/pest --ci
+        env:
+          ACTOR_TEST_CONNECTION: ${{ matrix.database }}
+          DB_HOST: 127.0.0.1
+          DB_PORT: ${{ matrix.port }}
+          DB_DATABASE: testing
+          DB_USERNAME: ${{ matrix.username }}
+          DB_PASSWORD: ''

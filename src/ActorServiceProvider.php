@@ -13,7 +13,7 @@ class ActorServiceProvider extends PackageServiceProvider
             ->name('laravel-actor')
             ->hasConfigFile()
             ->hasMigrations([
-                'create_actions_table',
+                'create_actor_actions_table',
             ]);
     }
 }

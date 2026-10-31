@@ -3,10 +3,14 @@
 namespace Hasyirin\Actor\Models;
 
 use BackedEnum;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
+/**
+ * @property CarbonInterface|null $acted_at
+ */
 class Action extends Model
 {
     protected $fillable = [
@@ -18,6 +22,15 @@ class Action extends Model
         'name',
     ];
 
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function (Action $action) {
+            $action->acted_at ??= now();
+        });
+    }
+
     protected function casts(): array
     {
         return [
@@ -28,6 +41,12 @@ class Action extends Model
     public function getTable(): string
     {
         return $this->table ?? config('actor.tables.actions', 'actions');
+    }
+
+    public function getConnectionName()
+    {
+        // Relations give a related model without a connection the parent's connection, so pin the default.
+        return parent::getConnectionName() ?? config('database.default');
     }
 
     public function resource(): MorphTo
@@ -54,6 +73,6 @@ class Action extends Model
 
     public function scopeOfName(Builder $query, BackedEnum|string $name): Builder
     {
-        return $query->where('name', $name instanceof BackedEnum ? $name->value : $name);
+        return $query->where('name', $name instanceof BackedEnum ? (string) $name->value : $name);
     }
 }

@@ -10,18 +10,27 @@ return new class extends Migration
     {
         Schema::create(config('actor.tables.actions', 'actions'), function (Blueprint $table) {
 
+            $connection = Schema::getConnection();
+
             $table->id();
 
             $table->morphs('resource');
             $table->morphs('actor');
 
-            $table->string('name');
+            $name = $table->string('name');
+
+            // Match names exactly (case and accents), as PostgreSQL and SQLite do.
+            if (in_array($connection->getDriverName(), ['mysql', 'mariadb'], true)) {
+                $name->charset('utf8mb4')->collation('utf8mb4_bin');
+            }
 
             $table->timestamp('acted_at')->useCurrent();
 
             $table->timestamps();
 
-            $table->unique(['resource_type', 'resource_id', 'name'], 'actions_resource_name_unique');
+            $prefix = $connection->getConfig('prefix_indexes') ? $connection->getTablePrefix() : '';
+
+            $table->unique(['resource_type', 'resource_id', 'name'], str_replace('.', '_', $prefix.$table->getTable()).'_resource_name_unique');
 
         });
     }

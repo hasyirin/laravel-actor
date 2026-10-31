@@ -19,6 +19,8 @@ class TestCase extends Orchestra
             fn (string $modelName) => 'Hasyirin\\Actor\\Database\\Factories\\'.class_basename($modelName).'Factory'
         );
 
+        Schema::dropAllTables();
+
         $this->createFixtureTables();
         $this->runPackageMigration();
     }
@@ -32,7 +34,7 @@ class TestCase extends Orchestra
 
     public function getEnvironmentSetUp($app)
     {
-        config()->set('database.default', 'testing');
+        config()->set('database.default', env('ACTOR_TEST_CONNECTION', 'testing'));
         config()->set('auth.providers.users.model', ExampleActor::class);
     }
 
@@ -56,7 +58,7 @@ class TestCase extends Orchestra
 
     protected function runPackageMigration(): void
     {
-        $migration = require __DIR__.'/../database/migrations/create_actions_table.php.stub';
+        $migration = require __DIR__.'/../database/migrations/create_actor_actions_table.php.stub';
         $migration->up();
     }
 }
