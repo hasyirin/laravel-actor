@@ -9,6 +9,8 @@ use Hasyirin\Actor\Events\ActionRecorded;
 use Hasyirin\Actor\Exceptions\MissingActorException;
 use Hasyirin\Actor\Models\Action;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Throwable;
 
 class Actor
 {
@@ -35,24 +37,45 @@ class Actor
         $values = [
             'actor_type' => $actor->getMorphClass(),
             'actor_id' => $actor->getKey(),
-            'acted_at' => (new $class)->fromDateTime($at ?? now()),
+            'acted_at' => $at ?? now(),
         ];
 
-        // Write first: a transaction that reads first fails at once on SQLite and on MariaDB under contention.
-        // The read-back stays inside, so the upsert's row lock keeps a concurrent delete out until it is done.
-        // The event stays inside, so it follows this transaction and not one open on another connection.
-        // Laravel before 13.39 keeps the event of a failed COMMIT, so this needs Laravel 13.39 or later.
-        $record = $class::query()->getConnection()->transaction(function () use ($class, $attributes, $values) {
-            $class::query()->upsert([$attributes + $values], array_keys($attributes), array_keys($values));
+        $connection = $class::query()->getConnection();
+        $sqlite = $connection->getDriverName() === 'sqlite';
 
-            $record = $class::query()->where($attributes)->firstOrFail();
+        $save = fn (bool $lock) => $connection->transaction(function () use ($class, $connection, $attributes, $values, $sqlite, $lock) {
+            // SQLite has no row locks. A write as the first statement takes its write lock now; a read first fails at the upgrade.
+            if ($sqlite) {
+                $class::query()->toBase()->where($attributes)->update(['name' => $connection->raw('name')]);
+            }
 
-            event(new ActionRecorded($record));
+            // Dirty tracking needs the latest row, or two saves can mix their values.
+            $record = $lock ? $class::query()->where($attributes)->lockForUpdate()->first() : null;
+
+            // Hydration drops a ::write suffix, and a save on the plain connection would wait for this row's lock.
+            $record?->setConnection((new $class)->getConnectionName());
+            $record ??= (new $class)->setRawAttributes($attributes);
+
+            // The event stays inside, so it follows this transaction and not one open on another connection.
+            // Laravel before 13.39 keeps the event of a failed COMMIT, so this needs Laravel 13.39 or later.
+            if ($record->forceFill($values)->save()) {
+                event(new ActionRecorded($record));
+            }
 
             return $record;
         }, 3);
 
-        if ($on->relationLoaded('actions') && in_array(InteractsWithActions::class, class_uses_recursive($on), true)) {
+        // This read stays outside the transaction, so a missing row takes no gap lock on InnoDB.
+        $exists = $sqlite || $class::query()->where($attributes)->exists();
+
+        // A first act that loses the race runs again with the lock. A delete can remove the winner's row, so it can lose again.
+        $record = retry(
+            3,
+            fn (int $attempt) => $save($exists || $attempt > 1),
+            when: fn (Throwable $e) => $e instanceof UniqueConstraintViolationException,
+        );
+
+        if (! $record->isDirty() && $on->relationLoaded('actions') && in_array(InteractsWithActions::class, class_uses_recursive($on), true)) {
             $actions = $on->getRelation('actions');
             $index = $actions->search(fn (Model $loaded) => $loaded->getRawOriginal('name') === $record->getRawOriginal('name'));
 

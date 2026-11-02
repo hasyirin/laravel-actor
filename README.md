@@ -105,7 +105,7 @@ Actor::findAction($post, 'approved', $editor);  // only if $editor is the curren
 
 ### Latest-state semantics
 
-`act()` is an upsert keyed on `(resource_type, resource_id, name)`. Re-acting the same action on the same resource overwrites the actor and timestamp — there is only ever one row per `(resource, name)`. If you need a full event history, this package is not the right choice.
+`act()` creates or updates the row for `(resource_type, resource_id, name)`. Re-acting the same action on the same resource overwrites the actor and timestamp — there is only ever one row per `(resource, name)`. If you need a full event history, this package is not the right choice.
 
 ### Events
 
@@ -123,19 +123,31 @@ Event::listen(function (ActionRecorded $event) {
 
 - If a transaction is open on the action's connection, the event waits until that transaction commits. If that transaction rolls back, the event does not fire. A retry does not fire it twice.
 - A transaction on another connection does not delay the event, so a listener can run before that transaction commits.
-- The event fires for first acts and repeat acts. It does not tell you which one it was, and it does not hold the previous actor.
+- The event fires for first acts and repeat acts. `$event->action->wasRecentlyCreated` tells you which one it was, and `getChanges()` and `getPrevious()` show what a repeat act changed. They are empty on a first act. A queued listener gets a reloaded model, which has none of this.
 - A listener cannot cancel an act, because the row is already saved. If a listener throws, `act()` throws too, and a loaded `actions` relation does not show the new row.
 
-`act()` writes with a native upsert, not through a model save. It fires no Eloquent write events (`creating`, `created`, `updating`, `updated`, `saving`, `saved`), and the casts and mutators of a custom action model do not apply to the write. `act()` reads the row back through Eloquent, so casts apply to the returned model. `wasRecentlyCreated` is always `false` on the returned model.
+`act()` saves the row through Eloquent. Model events fire (`saving`, `creating` or `updating`, `created` or `updated`, `saved`), and casts and mutators apply to every column except `resource_type`, `resource_id` and `name`. `act()` finds the row by these three columns, so it writes them as given. `updating` and `updated` fire only when a column changes: a repeat act that changes nothing, such as the same actor in the same second, fires only `saving` and `saved`, and still dispatches `ActionRecorded`.
+
+Model observers and `ActionRecorded` listeners run at different times:
+
+- Model observers run inside the transaction of `act()`, before the commit. Their database writes commit with the action, and an observer that throws rolls the action back. Until the commit, other processes cannot see the changes. A slow observer holds the row lock. On SQLite, it holds the write lock of the whole database. If `act()` runs again after a deadlock, or after a first act that lost a race, the observers run again.
+- `ActionRecorded` listeners run once, after the commit.
+
+Put work that the database cannot roll back, such as emails, HTTP calls and cache updates, in an `ActionRecorded` listener. A job on a queue outside this database, such as Redis or SQS, counts too, unless you dispatch it with `afterCommit()`. Otherwise it can start before the commit. It then finds no row for a first act, or the old values for a repeat act.
+
+You can also implement `Illuminate\Contracts\Events\ShouldHandleEventsAfterCommit` on an observer. Laravel then runs its `created`, `updated` and `saved` methods once, after the commit. It still runs `saving`, `creating` and `updating` inside the transaction, on each attempt, so a `saving` observer that sets a column keeps working.
+
+If a `saving`, `creating` or `updating` listener returns `false`, `act()` writes nothing and does not dispatch `ActionRecorded`. It returns the unsaved model and leaves a loaded `actions` relation alone.
 
 ### Concurrency
 
 You can call `act()` from concurrent requests:
 
-- `act()` runs one upsert and reads the row back, in a short transaction. When two calls for the same resource and name run at the same time, the row gets the values of one call, never a mix of both. The last call to commit wins.
+- `act()` locks the row and saves it, in a short transaction. When two calls for the same resource and name run at the same time, the row gets the values of one call, never a mix of both. This includes columns that a `saving` observer sets. The last call to commit wins.
 - When the transaction fails with a deadlock or a serialization failure, Laravel runs it again, 3 attempts in total. A lock wait timeout counts too, so a row that another session keeps locked can make `act()` wait 3 times.
+- A first act that loses the race to another first act runs again and updates the row, 3 attempts in total.
 - A concurrent delete waits until `act()` commits. The returned model can then describe a row that no longer exists.
-- Each repeat act uses up an auto-increment ID, so the `id` column has gaps.
+- A tight loop of deletes on the same rows can use up these attempts. `act()` then throws the last database error.
 
 If you call `act()` inside your own transaction, Laravel cannot run `act()` again on its own. A concurrent `act()` for the same resource and name can then make your transaction fail with a `DeadlockException`. Give your transaction more attempts, so that Laravel runs all of it again. A retry does not roll back the state of your models, so load them inside the closure:
 
@@ -150,7 +162,7 @@ DB::transaction(function () use ($id) {
 
 Two setups need more care:
 
-- On PostgreSQL at `REPEATABLE READ` or `SERIALIZABLE`, Laravel does not retry this `DeadlockException`. Catch it and run your transaction again yourself.
+- On PostgreSQL at `REPEATABLE READ` or `SERIALIZABLE`, Laravel does not retry this failure. `act()` throws a `DeadlockException` on a repeat act and a `UniqueConstraintViolationException` on a first act. Catch the exception and run your transaction again yourself.
 - On SQLite, if your transaction reads first and then calls `act()`, it can fail with "database is locked" while another process writes. Set `'transaction_mode' => 'IMMEDIATE'` on the connection, or call `act()` outside the transaction.
 
 ### Loaded relations
@@ -165,7 +177,21 @@ Action names match exactly, including case and accents. On MySQL and MariaDB, th
 
 ### Custom action models
 
-Set `models.action` in the config to use your own model. The model must extend `Hasyirin\Actor\Models\Action`. Its table must keep the unique index on `(resource_type, resource_id, name)`, because `act()` upserts on it. `SoftDeletes` is not supported: `act()` throws a `ModelNotFoundException` when the row is soft-deleted.
+Set `models.action` in the config to use your own model. The model must extend `Hasyirin\Actor\Models\Action`. Its table must keep the unique index on `(resource_type, resource_id, name)`, because the index keeps one row per action when first acts race. `SoftDeletes` is not supported: `act()` throws a `UniqueConstraintViolationException` when the row is soft-deleted.
+
+To keep an extra column in sync with the actor, set it in a `saving` observer. The observer runs on first acts and repeat acts, and `act()` saves the column with the actor, so no reader sees the new actor with the old value. The column can be required.
+
+```php
+class Action extends \Hasyirin\Actor\Models\Action
+{
+    protected static function booted(): void
+    {
+        static::saving(function (Action $action) {
+            $action->profile_id = $action->actor->current_profile_id;
+        });
+    }
+}
+```
 
 ### Database connection
 

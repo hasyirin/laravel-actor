@@ -2,6 +2,21 @@
 
 All notable changes to `laravel-actor` will be documented in this file.
 
+## v2.1.0 - 2026-11-02
+
+### Changed
+
+- `act()` saves through Eloquent again, under a row lock, instead of with a native upsert. Model events fire (`updating` and `updated` only when a column changes), casts and mutators apply to every column except `resource_type`, `resource_id` and `name`, and `wasRecentlyCreated` is `true` on a first act. Observers run inside the transaction of `act()`, and they run again if `act()` retries.
+- `ActionRecorded` listeners can read `wasRecentlyCreated`, `getChanges()` and `getPrevious()` on `$event->action`, unless they are queued.
+- If a `saving`, `creating` or `updating` listener returns `false`, `act()` writes nothing, does not dispatch `ActionRecorded`, and returns the unsaved model.
+- A repeat act no longer uses up an auto-increment ID.
+- On a soft-deleted row, `act()` throws `UniqueConstraintViolationException` instead of `ModelNotFoundException`. `SoftDeletes` is still not supported.
+- On PostgreSQL at `REPEATABLE READ` or `SERIALIZABLE`, a first act that loses a race inside your own transaction throws `UniqueConstraintViolationException` instead of `DeadlockException`.
+
+### Fixed
+
+- A custom action model can keep an extra column in sync with the actor again. In v2.0.0, `saving` observers never ran, so a repeat act left the new actor with the old value, and a required column made every `act()` fail. An observer now runs on first acts and repeat acts, and `act()` saves the column with the actor.
+
 ## v2.0.0 - 2026-11-01
 
 ### Breaking changes

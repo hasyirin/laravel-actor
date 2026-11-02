@@ -6,10 +6,10 @@ use Hasyirin\Actor\Facades\Actor;
 use Hasyirin\Actor\Models\Action;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -34,7 +34,7 @@ it('records an action', function () {
         ->and($action->name)->toBe('approved');
 });
 
-it('upserts on repeated act calls for the same (resource, name)', function () {
+it('keeps one row on repeated act calls for the same (resource, name)', function () {
     Actor::act($this->resource, 'approved', $this->actor);
     Actor::act($this->resource, 'approved', $this->actor);
 
@@ -161,10 +161,10 @@ it('act() writes acted_at in the date format of the action model', function () {
 
     Actor::act($this->resource, 'approved', $this->actor, CarbonImmutable::parse('2026-01-02 03:04:05'));
 
-    expect(DB::getQueryLog()[0]['bindings'])->toContain('2026-01-02T03:04:05');
+    expect(array_merge(...array_column(DB::getQueryLog(), 'bindings')))->toContain('2026-01-02T03:04:05');
 });
 
-it('act() writes one upsert and reads the row back, without Eloquent write events', function () {
+it('act() saves through Eloquent, so model events fire', function () {
     $bob = ExampleActor::create(['name' => 'bob']);
     $events = [];
     Action::creating(function () use (&$events) {
@@ -173,15 +173,50 @@ it('act() writes one upsert and reads the row back, without Eloquent write event
     Action::updating(function () use (&$events) {
         $events[] = 'updating';
     });
-    DB::enableQueryLog();
 
     Actor::act($this->resource, 'approved', $this->actor);
     Actor::act($this->resource, 'approved', $bob);
 
-    $statements = collect(DB::getQueryLog())->map(fn (array $query) => strtok($query['query'], ' '))->all();
+    expect($events)->toBe(['creating', 'updating']);
+});
 
-    expect($events)->toBe([])
-        ->and($statements)->toBe(['insert', 'select', 'insert', 'select']);
+it('act() tells a first act from a repeat act', function () {
+    $first = Actor::act($this->resource, 'approved', $this->actor);
+    $repeat = Actor::act($this->resource, 'approved', $this->actor);
+
+    expect($first->wasRecentlyCreated)->toBeTrue()
+        ->and($repeat->wasRecentlyCreated)->toBeFalse();
+});
+
+it('act() does not use up an auto-increment ID on a repeat act', function () {
+    $first = Actor::act($this->resource, 'approved', $this->actor);
+    Actor::act($this->resource, 'approved', ExampleActor::create(['name' => 'bob']));
+
+    $next = Actor::act($this->resource, 'reviewed', $this->actor);
+
+    expect($next->getKey())->toBe($first->getKey() + 1);
+});
+
+it('act() does not wait for its own row lock on a ::write connection', function () {
+    if (! in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)) {
+        $this->markTestSkipped('Only tested where a lock wait timeout fails fast.');
+    }
+
+    config()->set('database.connections.writer', config('database.connections.'.DB::getDefaultConnection()));
+    $model = new class extends Action
+    {
+        protected $connection = 'writer::write';
+    };
+    config()->set('actor.models.action', $model::class);
+    DB::connection('writer')->statement('set session innodb_lock_wait_timeout = 1');
+    DB::connection('writer::write')->statement('set session innodb_lock_wait_timeout = 1');
+    $bob = ExampleActor::create(['name' => 'bob']);
+
+    Actor::act($this->resource, 'approved', $this->actor);
+    $action = Actor::act($this->resource, 'approved', $bob);
+
+    expect($action->actor_id)->toBe($bob->getKey())
+        ->and($model::query()->sole()->actor_id)->toBe($bob->getKey());
 });
 
 it('act() updates a loaded actions relation without querying it again', function () {
@@ -280,7 +315,7 @@ it('act() throws and leaves the row alone when the row is soft-deleted', functio
     Actor::act($this->resource, 'approved', $this->actor)->delete();
     $bob = ExampleActor::create(['name' => 'bob']);
 
-    expect(fn () => Actor::act($this->resource, 'approved', $bob))->toThrow(ModelNotFoundException::class)
+    expect(fn () => Actor::act($this->resource, 'approved', $bob))->toThrow(UniqueConstraintViolationException::class)
         ->and($model::withTrashed()->sole()->actor_id)->toBe($this->actor->getKey());
 });
 
@@ -366,7 +401,7 @@ it('act() accepts a BackedEnum and stores its value', function () {
     expect($action->name)->toBe('approved');
 });
 
-it('act() with BackedEnum upserts against a string with the same value', function () {
+it('act() with a BackedEnum updates the row of a string with the same value', function () {
     Actor::act($this->resource, 'approved', $this->actor);
     Actor::act($this->resource, ExampleAction::Approved, $this->actor);
 

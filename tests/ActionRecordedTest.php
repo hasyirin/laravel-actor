@@ -163,6 +163,26 @@ it('keeps the saved row when a listener of ActionRecorded throws', function () {
         ->and($this->resource->getRelation('actions'))->toBeEmpty();
 });
 
+it('tells a listener of ActionRecorded whether the act was a first act and what it changed', function () {
+    $bob = ExampleActor::create(['name' => 'bob']);
+    $seen = [];
+    Event::listen(ActionRecorded::class, function (ActionRecorded $event) use (&$seen) {
+        $seen[] = [
+            $event->action->wasRecentlyCreated,
+            array_keys($event->action->getChanges()),
+            $event->action->getPrevious()['actor_id'] ?? null,
+        ];
+    });
+
+    Actor::act($this->resource, 'approved', $this->actor);
+    Actor::act($this->resource, 'approved', $bob);
+
+    expect($seen[0][0])->toBeTrue()
+        ->and($seen[1][0])->toBeFalse()
+        ->and($seen[1][1])->toContain('actor_id')
+        ->and($seen[1][2])->toBe($this->actor->getKey());
+});
+
 it('reloads the action of ActionRecorded for a queued listener', function () {
     $event = new ActionRecorded(Actor::act($this->resource, 'approved', $this->actor));
     $bob = ExampleActor::create(['name' => 'bob']);
