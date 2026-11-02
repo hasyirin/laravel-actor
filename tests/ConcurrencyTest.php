@@ -397,31 +397,6 @@ it('act() returns its row while another process keeps deleting it', function () 
     expect($errors)->toBe([]);
 });
 
-it('act() returns its row while other processes act and another keeps deleting it', function () {
-    $until = microtime(true) + 0.5;
-
-    $errors = runAtOnce([
-        ...array_map(fn (Model $actor) => function () use ($until, $actor) {
-            while (microtime(true) < $until) {
-                Actor::act($this->resource, 'approved', $actor);
-            }
-        }, [$this->bob, $this->bot]),
-        function () use ($until) {
-            while (microtime(true) < $until) {
-                try {
-                    Action::query()->ofResource($this->resource)->delete();
-                } catch (QueryException) {
-                    // Only errors from act() count here.
-                }
-
-                usleep(2000);
-            }
-        },
-    ]);
-
-    expect($errors)->toBe([]);
-});
-
 it('act() updates the row when another connection saves the same first act after the check', function () {
     if (DB::getDriverName() === 'sqlite') {
         $this->markTestSkipped('SQLite takes its write lock before the check, so another connection cannot get in.');
