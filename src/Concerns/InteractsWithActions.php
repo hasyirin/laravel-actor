@@ -8,6 +8,7 @@ use Hasyirin\Actor\Facades\Actor;
 use Hasyirin\Actor\Models\Action;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Support\Collection;
 
 /**
  * @mixin Model
@@ -27,7 +28,7 @@ trait InteractsWithActions
 
         return $this->actions()
             ->ofName($action)
-            ->when($actor, fn ($query) => $query->ofActor($actor))
+            ->when($actor, fn ($query, Model $actor) => $query->ofActor($actor))
             ->exists();
     }
 
@@ -39,7 +40,7 @@ trait InteractsWithActions
 
         return $this->actions()
             ->ofName($name)
-            ->when($actor, fn ($query) => $query->ofActor($actor))
+            ->when($actor, fn ($query, Model $actor) => $query->ofActor($actor))
             ->first();
     }
 
@@ -47,6 +48,7 @@ trait InteractsWithActions
     {
         $value = $name instanceof BackedEnum ? (string) $name->value : $name;
 
+        /** @var Collection<int, Action> $collection */
         $collection = $this->getRelation('actions');
 
         if ($actor) {
@@ -55,7 +57,11 @@ trait InteractsWithActions
                 ->where('actor_id', $actor->getKey());
         }
 
-        return $collection->first(fn (Model $action) => (string) $action->getRawOriginal('name') === $value);
+        return $collection->first(function (Model $action) use ($value) {
+            $raw = $action->getRawOriginal('name');
+
+            return is_scalar($raw) && (string) $raw === $value;
+        });
     }
 
     /**

@@ -10,6 +10,7 @@ use Hasyirin\Actor\Exceptions\MissingActorException;
 use Hasyirin\Actor\Models\Action;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Collection;
 use Throwable;
 
 class Actor
@@ -26,7 +27,7 @@ class Actor
             throw MissingActorException::authenticatedUserIsNotAModel($actor);
         }
 
-        $class = config('actor.models.action', Action::class);
+        $class = $this->actionModel();
 
         $attributes = [
             'resource_type' => $on->getMorphClass(),
@@ -40,7 +41,7 @@ class Actor
             'acted_at' => $at ?? now(),
         ];
 
-        $connection = $class::query()->getConnection();
+        $connection = (new $class)->getConnection();
         $sqlite = $connection->getDriverName() === 'sqlite';
 
         $save = fn (bool $lock) => $connection->transaction(function () use ($class, $connection, $attributes, $values, $sqlite, $lock) {
@@ -76,6 +77,7 @@ class Actor
         );
 
         if (! $record->isDirty() && $on->relationLoaded('actions') && in_array(InteractsWithActions::class, class_uses_recursive($on), true)) {
+            /** @var Collection<int, Model> $actions */
             $actions = $on->getRelation('actions');
             $index = $actions->search(fn (Model $loaded) => $loaded->getRawOriginal('name') === $record->getRawOriginal('name'));
 
@@ -87,24 +89,38 @@ class Actor
 
     public function findAction(Model $on, BackedEnum|string $action, ?Model $actor = null): ?Action
     {
-        return config('actor.models.action', Action::class)::query()
+        return $this->actionModel()::query()
             ->ofResource($on)
             ->ofName($action)
-            ->when($actor, fn ($query) => $query->ofActor($actor))
+            ->when($actor, fn ($query, Model $actor) => $query->ofActor($actor))
             ->first();
     }
 
     public function acted(Model $on, BackedEnum|string $action, ?Model $actor = null): bool
     {
-        return config('actor.models.action', Action::class)::query()
+        return $this->actionModel()::query()
             ->ofResource($on)
             ->ofName($action)
-            ->when($actor, fn ($query) => $query->ofActor($actor))
+            ->when($actor, fn ($query, Model $actor) => $query->ofActor($actor))
             ->exists();
+    }
+
+    /**
+     * @return class-string<Action>
+     */
+    private function actionModel(): string
+    {
+        /** @var class-string<Action> $class */
+        $class = config('actor.models.action', Action::class);
+
+        return $class;
     }
 
     private function authenticatedUser(): mixed
     {
-        return auth(config('actor.guard'))->user();
+        /** @var string|null $guard */
+        $guard = config('actor.guard');
+
+        return auth($guard)->user();
     }
 }

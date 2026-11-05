@@ -23,7 +23,7 @@ jobs:
         stability: [prefer-lowest, prefer-stable]
         include:
           - laravel: 13.*
-            testbench: 11.*
+            testbench: ^11.3
 
     name: P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.stability }} - ${{ matrix.os }}
 
@@ -110,7 +110,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          composer require "laravel/framework:13.*" "orchestra/testbench:11.*" --no-interaction --no-update
+          composer require "laravel/framework:13.*" "orchestra/testbench:^11.3" --no-interaction --no-update
           composer update --prefer-stable --prefer-dist --no-interaction
 
       - name: Execute tests
