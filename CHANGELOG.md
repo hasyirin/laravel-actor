@@ -2,6 +2,25 @@
 
 All notable changes to `laravel-actor` will be documented in this file.
 
+## v2.2.0 - 2026-11-05
+
+### Changed
+
+- Requires `spatie/laravel-package-tools` 1.93 or later (was 1.16).
+- A repeat act no longer eager-loads the `$with` relations of the action model it returns. They load when you first use them, also with `Model::preventLazyLoading()`.
+- `act()` keeps a model of another class with the same `name` in a loaded `actions` relation, and adds its row after it. Before, it replaced that model.
+- The `Action` model declares the types of its columns with `@property` tags. If your custom action model casts a column, for example `name` to an enum, declare that `@property` on your model, so PHPStan sees the cast type.
+- `actor()` and `resource()` return `MorphTo<Model, $this>`, and the scopes use `Builder<static>`. An override of `actor()` or `resource()` that declares a narrower type, such as `MorphTo<User, $this>`, now fails PHPStan's `method.childReturnType` check.
+- Dev dependencies require their current releases, and PHPStan checks the package at level 10.
+
+### Fixed
+
+- On an action model that eager-loads `actor` through `$with`, a repeat act now gives `saving` observers and the returned model the new actor. Before, the old actor stayed loaded, so an observer that copied data from `$action->actor` saved the old actor's data.
+- The model that a first act returns stays on the connection that saved it. Before, a model without its own `$connection` followed `database.default`, so it switched connections when that setting changed.
+- When an int-backed enum cast stored a loaded action's name as an int, `act()` now replaces that action in the loaded `actions` relation. Before, it added a second copy.
+- `act()`, `action()` and `acted()` no longer throw a `TypeError` when a loaded `actions` relation holds an item that is not a model.
+- `action()` and `acted()` skip a loaded model of another class with the same `name`. Before, they threw a `TypeError`.
+
 ## v2.1.0 - 2026-11-02
 
 ### Changed
