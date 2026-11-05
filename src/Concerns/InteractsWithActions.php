@@ -48,7 +48,7 @@ trait InteractsWithActions
     {
         $value = $name instanceof BackedEnum ? (string) $name->value : $name;
 
-        /** @var Collection<int, Action> $collection */
+        /** @var Collection<int, mixed> $collection */
         $collection = $this->getRelation('actions');
 
         if ($actor) {
@@ -57,11 +57,13 @@ trait InteractsWithActions
                 ->where('actor_id', $actor->getKey());
         }
 
-        return $collection->first(function (Model $action) use ($value) {
-            $raw = $action->getRawOriginal('name');
+        $action = $collection->first(function (mixed $loaded) use ($value) {
+            $raw = $loaded instanceof Action ? $loaded->getRawOriginal('name') : null;
 
             return is_scalar($raw) && (string) $raw === $value;
         });
+
+        return $action instanceof Action ? $action : null;
     }
 
     /**

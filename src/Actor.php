@@ -77,9 +77,14 @@ class Actor
         );
 
         if (! $record->isDirty() && $on->relationLoaded('actions') && in_array(InteractsWithActions::class, class_uses_recursive($on), true)) {
-            /** @var Collection<int, Model> $actions */
+            /** @var Collection<int, mixed> $actions */
             $actions = $on->getRelation('actions');
-            $index = $actions->search(fn (Model $loaded) => $loaded->getRawOriginal('name') === $record->getRawOriginal('name'));
+            $name = $record->getRawOriginal('name');
+            $index = $actions->search(function (mixed $loaded) use ($name) {
+                $raw = $loaded instanceof Action ? $loaded->getRawOriginal('name') : null;
+
+                return is_scalar($raw) && (string) $raw === $name;
+            });
 
             $on->setRelation('actions', $index === false ? $actions->concat([$record]) : $actions->replace([$index => $record]));
         }

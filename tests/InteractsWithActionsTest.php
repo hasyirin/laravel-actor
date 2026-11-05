@@ -208,8 +208,8 @@ it('trait action() and actions read the connection that act() writes to', functi
         ->and($this->resource->actions)->toHaveCount(1);
 });
 
-it('trait action() and acted() accept a loaded actions relation that holds another model class', function () {
-    $this->resource->setRelation('actions', new Collection([$this->actor]));
+it('trait action() and acted() skip loaded items that are not actions, even with the same name', function () {
+    $this->resource->setRelation('actions', new Collection(['approved', ExampleActor::create(['name' => 'approved'])]));
 
     expect($this->resource->action('approved'))->toBeNull()
         ->and($this->resource->acted('approved'))->toBeFalse();

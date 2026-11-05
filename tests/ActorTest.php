@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Schema;
 use Workbench\App\Enums\ExampleAction;
 use Workbench\App\Enums\ExampleIntAction;
 use Workbench\App\Models\ExampleActor;
+use Workbench\App\Models\ExampleCastAction;
 use Workbench\App\Models\ExampleResource;
 
 beforeEach(function () {
@@ -303,6 +304,32 @@ it('act() accepts a loaded actions relation that holds another model class', fun
     Actor::act($this->resource, 'approved', $this->actor);
 
     expect($this->resource->getRelation('actions'))->toHaveCount(2);
+});
+
+it('act() keeps loaded items that are not actions, even with the same name', function () {
+    $foreign = ExampleActor::create(['name' => 'approved']);
+    $this->resource->setRelation('actions', new Collection(['approved', $foreign]));
+
+    $action = Actor::act($this->resource, 'approved', $this->actor);
+
+    expect($this->resource->getRelation('actions')->all())->toBe(['approved', $foreign, $action]);
+});
+
+it('act() replaces a loaded action whose name an int-backed enum cast set as an int', function () {
+    config()->set('actor.models.action', ExampleCastAction::class);
+    $loaded = ExampleCastAction::create([
+        'resource_type' => $this->resource->getMorphClass(),
+        'resource_id' => $this->resource->getKey(),
+        'actor_type' => $this->actor->getMorphClass(),
+        'actor_id' => $this->actor->getKey(),
+        'name' => ExampleIntAction::Published,
+    ]);
+    $this->resource->setRelation('actions', new Collection([$loaded]));
+
+    $action = Actor::act($this->resource, ExampleIntAction::Published, ExampleActor::create(['name' => 'bob']));
+
+    expect($loaded->getRawOriginal('name'))->toBe(1)
+        ->and($this->resource->getRelation('actions')->all())->toBe([$action]);
 });
 
 it('act() throws and leaves the row alone when the row is soft-deleted', function () {
