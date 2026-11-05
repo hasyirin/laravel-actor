@@ -220,6 +220,15 @@ it('act() does not wait for its own row lock on a ::write connection', function 
         ->and($model::query()->sole()->actor_id)->toBe($bob->getKey());
 });
 
+it('act() pins a first act to the connection that saved it', function () {
+    $connection = DB::getDefaultConnection();
+
+    $action = Actor::act($this->resource, 'approved', $this->actor);
+    config()->set('database.default', 'another');
+
+    expect($action->getConnectionName())->toBe($connection);
+});
+
 it('act() updates a loaded actions relation without querying it again', function () {
     Actor::act($this->resource, 'approved', $this->actor);
     $this->resource->load('actions');

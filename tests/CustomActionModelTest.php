@@ -37,6 +37,21 @@ it('runs a saving observer on a repeat act by another actor', function () {
         ->and($row->actor_name)->toBe('bob');
 });
 
+it('runs a saving observer with the new actor when the action model eager-loads its actor', function () {
+    $model = new class extends ExampleSnapshotAction
+    {
+        protected $with = ['actor'];
+    };
+    config()->set('actor.models.action', $model::class);
+
+    Actor::act($this->resource, 'approved', $this->alice);
+    $action = Actor::act($this->resource, 'approved', $this->bob);
+
+    expect($action->actor_name)->toBe('bob')
+        ->and($action->actor->is($this->bob))->toBeTrue()
+        ->and($model::query()->sole()->actor_name)->toBe('bob');
+});
+
 it('works with a required column that a saving observer fills', function () {
     Schema::table('actions', fn (Blueprint $table) => $table->string('actor_name')->nullable(false)->change());
 

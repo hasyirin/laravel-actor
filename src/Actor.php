@@ -51,11 +51,13 @@ class Actor
             }
 
             // Dirty tracking needs the latest row, or two saves can mix their values.
-            $record = $lock ? $class::query()->where($attributes)->lockForUpdate()->first() : null;
+            // Eager loads would keep the old actor after forceFill() changes it.
+            $record = $lock ? $class::query()->withoutEagerLoads()->where($attributes)->lockForUpdate()->first() : null;
+            $record ??= (new $class)->setRawAttributes($attributes);
 
             // Hydration drops a ::write suffix, and a save on the plain connection would wait for this row's lock.
-            $record?->setConnection((new $class)->getConnectionName());
-            $record ??= (new $class)->setRawAttributes($attributes);
+            // A new model needs this too: Action::getConnectionName() is never empty, so save() does not pin it.
+            $record->setConnection((new $class)->getConnectionName());
 
             // The event stays inside, so it follows this transaction and not one open on another connection.
             // Laravel before 13.39 keeps the event of a failed COMMIT, so this needs Laravel 13.39 or later.
